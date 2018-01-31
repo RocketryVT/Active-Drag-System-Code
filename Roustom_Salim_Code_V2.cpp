@@ -24,6 +24,8 @@ PS0 |*        *| 3VO     v            \-Z
 #include "utility/Adafruit_MS_PWMServoDriver.h"
 #include <SPI.h>
 #include <SD.h>
+#include "globalVariables.h"
+#include "adsVariables.h"
 
 #define FS 2 //this is the loop frequency in Hz as an integer
 double frequency = 2;//this is the loop frequency in Hz as a double
@@ -52,115 +54,16 @@ File dataFile;//File object that is associated with the file being written to
 
 char filename[] = "LOGGER00.txt";//the name for the text file that is being written to, the number will change (see further down in code)
 
-								 /*-----------INITIALIZE GLOBAL SYSTEM STATE VARIABLES--------------*/
+								 
 
-const double idealGasConstant = 287.058;//in J/kg*K
-
-										//sensor variables found using barometer
-double baseline = 0.0; // baseline pressure, used to set the zero for our relative altitude measurement
-double barAlt = 0.0; //in meters; variable to store the barometer's latest altitude measurement
-double prevBarAlt = 0.0;//in meters - variable to store the previous barometer's altitude measurement
-double barPressure = 0.0;//in Pascals
-double barTemp = 0.0;//in Kelvin
-double barDensity = 0.0;//in kg/m^3
-double barVel = 0.0;//in m/s - the variable that stores the current vertical velocity from barometer
-
-					//sensor variables found using IMU
-double accelX = 0.0;//in m/s^2 - the variable that stores the current X-axis acceleration
-double accelY = 0.0;//in m/s^2 - the variable that stores the current Y-axis acceleration
-double accelZ = 0.0;//in m/s^2 - the variable that stores the current Z-axis acceleration
-double eulerX = 0.0;//in deg - the variable that stores the current X-axis rotation/euler angle
-double eulerY = 0.0;//in deg - the variable that stores the current Y-axis rotation/euler angle
-double eulerZ = 0.0;//in deg - the variable that stores the current Z-axis rotation/euler angle
-double gyroX = 0.0;//in rad/s - the variable that stores the current X-axis rotation rate
-double gyroY = 0.0;//in rad/s - the variable that stores the current Y-axis rotation rate
-double gyroZ = 0.0;//in rad/s - the variable that stores the current Z-axis rotation rate
-double gravX = 0.0;//in m/s^2 - the variable that stores the current X-axis component of gravity
-double gravY = 0.0;//in m/s^2 - the variable that stores the current Y-axis component of gravity
-double gravZ = 0.0;//in m/s^2 - the variable that stores the current Z-axis component of gravity
-double accelInitialBias = 0.0;//the initial acceleration bias found from the setup phase
-double accelBias = 0.0;//the acceleration bias at the current
-double sensitivity = 2.0;//the sensitivity in meters used in the accel bias calc
-
-						 //filter characteristics and output variables
-const double tau = 0.3;//the time constant used in the filter
-double gain = tau / (tau + 0.1);//the gain of the filter - CHANGES DURING COMPLEMENTARY FILTER DEPENDING ON FILTER PERIOD TIME
-double filteredVelocity = 0.0;//variable the filtered velocity
-
-							  //timkeeping
-int currentTime = 0; //the current system time in milliseconds
-int lastTime = 0;  //the last system time in milliseconds
-double currentTimeSec = 0.0; //the current loop time in seconds
-double lastTimeSec = 0.0; //the last loop time in seconds
-int phase = 1; //this is the switch case variable used to store the phase of flight we are in
-boolean emergencyAbort = false;
-
-//------------------INITIALIZE ADS CONTROL SYSTEM VARIABLES-----------------------------//
-
-////flap state variables
-double CdR = 0.335;
-int currentStepPosition = 0;
-double CdA = 0.335;
-//double prevCdR = 0.335;
-
-
-//Search bounds for CdS solver
-double CdL = 0.1; //variable for lower search bound for CdS
-double CdU = 3; //upper search bound for CdS
-double CdS = 0.3;
-
-//reset variables for search bounds
-
-double CdLSTATIC = CdL; // reset for CdS lower search bounds
-double CdUSTATIC = CdU; //reset CdL search limit
-const double errTol = 0.05; //percent. specifies the search error for CdS solver
-const int maxIt = 50; //maxt iterations to run for CdSsolver CHANGE BACK
-const double apTar = 3048.0; //meters, apogee target
-const double m = 19.856385; // UPDATE BEFORE LAUNCH   //19.707; //kg, rocket burnout mass
-const double S = 0.0197; //m^2, rocket cross sectional reference area
-const double g = 9.80665;//in m/s^2 - standard gravity
-const double p1 = 0.002581; //const value for CFD flap actuation function SUBJECT TO CHANGE
-const double p2 = 0.3228; //const value for CFD actuation function. SUBJECT TO CHANGE
-double FlapPosCurrent = 0.0; //current flap posistion. This is always the actual posistion, not the commanded. (degree)
-double funcErrTotal = 0.0; //percent, variable for the summed up total function error
-double funcErrLast = 0.0; //percent, variable for the last calculated percent error of the CFD function
-double funcERR = 0.0; //percent, variable for the mean CFD function error
-int programTotIter = 1; //counts the number of times the whole program runs
-const double VcutOff = 15.0; //m/s, velocity when flaps are fully closed
-
-							 //variables used for predicted limits of flap drag coeffcients
-double CdAU = 2; //predicted upper range Cd of fins at full deployment
-double CdAL = 0.25; //predicted lower Cd at flaps closed
-double dFlapMax = 11.37; //degrees, maximum actuation at one time. SUBJECT TO CHANGE
-int dStepMax = 16;
-double FlapPosMax = 20; //degrees. Maximum position that the flaps can be adjusted to. SUBJECT TO CHANGE
-double FlapPos = 0.0; //sets intial commanded flap position
-int CdAminCdRSignOld = 0; //intializes the sign for the prop. flap actuation program
-int CdAminCdRSignNew = 0;
-double dFlap = 0.0; //sets actuation step
-double dFlapProp = dFlapMax / 2; //degrees, the intial flap adjustment for the flaps via prop. control. SUBJECT TO CHANGE
-double CdROld = 0.34; //last recorded required CdR
-double CdAOld = 0.34;
-//const double frequency = 1; //sec, the data polling rate. SUBJECT TO CHANGE <<<< COMMENTED OUT BEFORE POLLING RATE CHANGES
-
-//variables used for  triple J CdR correction
-const double p00 = 5.707;
-const double p10 = -0.001297;
-const double p01 = 0.01625;
-const double p20 = -.000000241; //DBL CHECK THIS
-const double p11 = -.000003447; //DBL CHECK
-const double p02 = -.0000136; //DBL CHECK
-
-							  //the variables above that are not declared as constant may change, but they cannot revert back to orginal values. hence they are declared as global
-
-							  /*
-							  Phase 1: Waiting for arming
-							  Phase 2: Waiting for launch
-							  Phase 3: Burn phase
-							  Phase 4: Coast phase
-							  Phase 5: Apogee phase + shutdown
-							  Phase 6: Wait for recovery
-							  */
+		/*
+		Phase 1: Waiting for arming
+		Phase 2: Waiting for launch
+		Phase 3: Burn phase
+		Phase 4: Coast phase
+		Phase 5: Apogee phase + shutdown
+		Phase 6: Wait for recovery
+		*/
 
 void sanityCheck();
 void setup();
@@ -334,17 +237,19 @@ void phase4()
 			{
 				CdS = (CdL + CdU) / 2; //assumes CdS is midpt of search interval
 				iterCDS = iterCDS + 1; //counts number of iterations
-									   //determines if the solution is in the search interval
+									   
+				
 				double test = ((((-((m * (log((2 * g * m)))) / (CdL * barDensity * S))) - ((-(m * (log((CdL * barDensity * S * (filteredVelocity * filteredVelocity)) + (2 * g * m)))) / (CdL * barDensity * S)))) + barAlt) - apTar) * ((((-((m * (log((2 * g * m)))) / (CdS * barDensity * S))) - ((-(m * (log((CdS * barDensity * S * (filteredVelocity * filteredVelocity)) + (2 * g * m)))) / (CdS * barDensity * S)))) + barAlt) - apTar);
+				
 				if (test < 0) 
 				{
 					CdU = CdS; //halfs the search interval
 				}
-				if (test > 0) 
+				else if (test > 0) 
 				{
 					CdL = CdS; //same as above
 				}
-				if (test == 0) 
+				else 
 				{
 					runCDS = 0; //terminates program. CdS is perfect solution
 				}
@@ -359,31 +264,31 @@ void phase4()
 			
 			
 			CdR = ((CdS * (PercentError / 100))) + CdS; //corrects CdS to get CdR
-			//------------------------END TRIPLE J CDR FINDER---------------------------------------------
-			//----------------------------------------FLAP ADJUSTMENT CALC--------------------------------------
+			//------------------------END TRIPLE J CDR FINDER---------------------
+			//------------------------FLAP ADJUSTMENT CALC------------------------
 
 
-			if ((CdR > CdAL) && (CdR < CdAU)) 
+			if ((CdR >= CdAL) && (CdR <= CdAU)) 
 			{
 				if (0.0 >(funcERR))  //only runs cfd function if it estimated to be within a fine enough error tolerance
 				{
 					FlapPos = (((CdR / 4) - p2) / p1); //sets commanded flap posistion;
-													   //            if (FlapPos > FlapPosMax) {
-													   //              FlapPos = FlapPosMax; //doesnt allow for over extending flaps
-													   //            }
-													   //            if (FlapPos < 0) {
-													   //              FlapPos = 0; //doesnt allow for negative commands
-													   //            }
-													   //            dFlap = (FlapPos - FlapPosCurrent); //determines dFlap
-													   //            if ((abs(dFlap) > dFlapMax)) {
-													   //              if (dFlap < 0) {
-													   //                dFlap = -dFlapMax; //sets to max possible actuation
-													   //              }
-													   //              if (dFlap > 0) {
-													   //                dFlap = dFlapMax; //same as above
-													   //              }
-													   //              FlapPos = FlapPosCurrent + dFlap; //adjust flap posistion command
-													   //            }
+					//            if (FlapPos > FlapPosMax) {
+					//              FlapPos = FlapPosMax; //doesnt allow for over extending flaps
+					//            }
+					//            if (FlapPos < 0) {
+					//              FlapPos = 0; //doesnt allow for negative commands
+					//            }
+					//            dFlap = (FlapPos - FlapPosCurrent); //determines dFlap
+					//            if ((abs(dFlap) > dFlapMax)) {
+					//              if (dFlap < 0) {
+					//                dFlap = -dFlapMax; //sets to max possible actuation
+					//              }
+					//              if (dFlap > 0) {
+					//                dFlap = dFlapMax; //same as above
+					//              }
+					//              FlapPos = FlapPosCurrent + dFlap; //adjust flap posistion command
+					//            }
 
 				}
 				else 
@@ -392,10 +297,11 @@ void phase4()
 					{
 						CdAminCdRSignNew = 0;
 					}
-					if (CdA < CdR) 
+					else if (CdA < CdR) 
 					{
 						CdAminCdRSignNew = 1;
 					}
+					
 					if (CdAminCdRSignNew != CdAminCdRSignOld) 
 					{
 						dFlapProp = dFlapProp / 2; //reduces step by 1/2
@@ -414,6 +320,8 @@ void phase4()
 							}
 						}
 					}
+					
+					/*THIS PART CHOOSES WHETHER THE FLAPS ARE GOING OUT OR IN*/
 					if (dFlapProp > dFlapMax) 
 					{
 						dFlapProp = dFlapMax; //prevents over stepping
@@ -435,7 +343,7 @@ void phase4()
 			}
 			else 
 			{
-				if (CdR >= CdAU) 
+				if (CdR > CdAU) 
 				{
 					dFlap = FlapPosMax - FlapPosCurrent; //sets flap actuation step
 					if (dFlap > dFlapMax) 
@@ -446,7 +354,7 @@ void phase4()
 				}
 				else 
 				{
-					if (CdR <= CdAL) 
+					if (CdR < CdAL) 
 					{
 						dFlap = FlapPosCurrent;
 						if (dFlap > dFlapMax) 
@@ -459,11 +367,13 @@ void phase4()
 
 			}
 
+
 			if (digitalRead(zeroSwitch) == LOW) //digitalRead(zeroSwitch) will read low when the switch is pressed
 			{
 				currentStepPosition = 0; //NEW
 			}
 
+			/*HOPEFULLY ALLOWS THE ROCKET TO CORRECT ITSELF BASED ON THE CP / CG */
 			if (eulerZ > 30.0 || eulerZ < -30.0)  //NEW
 			{
 				FlapPos = 0;
@@ -488,7 +398,7 @@ void phase4()
 				{
 					dFlap = -dFlapMax; //sets to max possible actuation
 				}
-				if (dFlap > 0) 
+				else if (dFlap > 0) 
 				{
 					dFlap = dFlapMax; //same as above
 				}
