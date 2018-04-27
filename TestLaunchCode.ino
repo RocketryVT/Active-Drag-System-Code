@@ -25,14 +25,14 @@ unsigned long previousTime = currentTime;
 unsigned long launchTime;
 
 //SD File name
-String fileName = "Test1";
+String fileName = "TestYay";
 
 //This converts IMU data to Gs for reading and comparing
 double conversionFactor = 0.224 * 0.001;
 
 //These values are the the threshold g's for launch and burnout
 double launchThreshold = -1.25;
-double burnoutThreshold = 5; 
+double burnoutThreshold = .2; 
 
 void setup() 
 {
@@ -149,8 +149,9 @@ void detectLaunch()
   imu.read();
 
   Serial.println(imu.a.z);
-  
-  while (imu.a.z < launchThreshold * conversionFactor)
+
+  //Flipped so that is false until the condition is met
+  while (imu.a.z > (launchThreshold / conversionFactor))
   {
       imu.read();
   }
@@ -161,8 +162,9 @@ void detectBurnout(double launchTime)
   imu.read();
 
   unsigned long burnoutCheck = 0;
-  
-  while ((imu.a.z < (burnoutThreshold * conversionFactor)) && (burnoutCheck < 7000))
+
+  //Flipped so that is false until the condition is met
+  while ((imu.a.z < (burnoutThreshold / conversionFactor)) && (burnoutCheck < 7000))
   {
     imu.read();
     burnoutCheck = millis() - launchTime;
@@ -179,12 +181,13 @@ void waitForever()
 void printString(String toWrite)
 {
     File testFile = SD.open(fileName, FILE_WRITE);
+    imu.read();
     
     digitalWrite(LED_BUILTIN, HIGH); 
     if (testFile)
     {
-      testFile.print(toWrite);
-
+      testFile.print(toWrite + " " + imu.a.z);
+      
       testFile.println();
       testFile.close();   //close file
     }
