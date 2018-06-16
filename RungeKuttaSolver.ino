@@ -1,40 +1,9 @@
-/*
- *  ODE solver
- * 
- * This code implements the runge-kutta (4th order) algorithm to solve a system of 
- * ordinary differential equations (ODEs). The code requires a given time step dt
- * and will continue indefinitely as long as the arduino runs (unless an exit condition
- * is added).
- * 
- * The ODE needs to be implemented in state-representation. Instead of Matlab convention 
- * y'=f(y,t), the function ODE(t,y,y_p) is used, where t is a given time, y the state 
- * vector and y_p the array which will be updated.
- * 
- * Created: April 2015, Daniel Heinrich
- * Updated: August 2016, Daniel Heinrich: changed data type to double,
- * fixed errors on numerical constants (2.0 instead of 2)
- * released as CC BY-SA 4.0 licence, see https://creativecommons.org/licenses/by-sa/4.0/
- * 
- * Data type considerations: on most arduinos except due, double is treated as float
- * (4-bit precision). On a due, double is 8-bit precision. If you want to use float on
- * a due, open the sketch in a text editor, hit STRG+H and replace double with float.
- * (you can also use #define to swich data types easily, but it makes the code less 
- * readable so I decided against it)
- * Also, on a due, values entered numerically (e.g. "0.5") are automatically treated as
- * double. To get float, (float)0.5 needs to be used (improves speed by ~5% for float).
- * 
- * calculation time for the 1000 steps with the ODE included below:
- * arduino UNO / Nano: ~760 ms (~ 1300 steps / second)
- * arduino due: ~140 ms (~ 7000 steps / second)
- * arduion due with float (see comments above): ~115 ms (~8700 steps / second)
- */
-
-const double dt=0.001;      // Timestep used by the algorithm
+const double dt=1;      // Timestep used by the algorithm
 const int n=4;                // number of state variables in the ODE
 int steps=0;                  // number of calculated steps
 double t=0;                 // current time
 
-double Y_current[n]={1, 0, 0, 0};    // Initial state of the ODE
+
 
 double Y_temp[n];            // temp array for the ODE function output.
 double K1[n] = {0, 0, 0, 0};
@@ -87,6 +56,7 @@ const double V0 = 248.93; // burnout velocity, m/s
 const double z0 = 1191.8; // burnout altitude (ALG), m
 const double theta0 = 1.412302977421291; // burout zenith angle, rad
 
+double Y_current[n]={x0, z0, theta0, V0};    // Initial state of the ODE
 
 // Debugging parameters:
 long time_lastprintout = millis();
@@ -95,6 +65,7 @@ long time_lastprintout = millis();
 void setup() {
   // initialize Serial to output the integrator results.
   Serial.begin(9600);
+  Serial.println("Begun");
 }
 
 void loop() {
@@ -133,7 +104,7 @@ void loop() {
   
   
   // Print output each X calculated steps:
-  if (steps>=20000) {
+  if (steps>=20) {
     Serial.print("state at ");
     Serial.print(t);
     Serial.print("s: ");
@@ -166,8 +137,55 @@ void ODE(double t, double Y[], double Y_p[]) {
 
   //Using new variables
   Y_p[0]= Y[3]*cos(Y[2]);
+  
+  
   Y_p[1]= Y[3]*sin(Y[2]);
+  
+  
   Y_p[2]= -g*cos(Y[2])/Y[3];
+  
+  
   Y_p[3]= (negativeoneover2m0*(rhoGROUND*pow((1-L0*Y[1]/TGROUND),onePLUSgMoverRL0))*pow(Y[3],2))*((S*(a+b*Y[3]/sqrt(R*gamma*(TGROUND+L0*Y[1]))+c*pow(Y[3],2)/R/gamma/(TGROUND+L0*Y[1])))+SCDflaps)-(g*sin(Y[2]));
   
 }
+
+
+
+void printValues()
+{
+  for (int i = 0; i < 4; i++)
+  {
+    Serial.print(Y_current[i]);
+    Serial.print(" ");
+  }
+  Serial.println();
+
+  for (int i = 0; i < 4; i++)
+  {
+    Serial.print(K1[i]);  
+    Serial.print(" ");
+  }
+  Serial.println();
+
+  for (int i = 0; i < 4; i++)
+  {
+    Serial.print(K2[i]);
+    Serial.print(" ");  
+  }
+  Serial.println();
+
+  for (int i = 0; i < 4; i++)
+  {
+    Serial.print(K3[i]);  
+    Serial.print(" ");
+  }
+  Serial.println();
+
+  for (int i = 0; i < 4; i++)
+  {
+    Serial.print(K4[i]); 
+    Serial.print(" "); 
+  }
+  Serial.println();
+}
+
